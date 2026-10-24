@@ -1,0 +1,463 @@
+name: Build Parental Control APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.5
+
+      - name: Generate Project Files
+        run: |
+          mkdir -p app/src/main/java/com/parental/control/service
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+
+          # --- GRADLE FILES ---
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "ParentalControl"
+          include ':app'
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.1.0' apply false
+              id 'org.jetbrains.kotlin.android' version '1.8.10' apply false
+          }
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
+          }
+          android {
+              namespace 'com.parental.control'
+              compileSdk 33
+              defaultConfig {
+                  applicationId "com.parental.control"
+                  minSdk 24
+                  targetSdk 33
+                  versionCode 1
+                  versionName "1.0"
+              }
+              buildTypes { release { minifyEnabled false } }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_1_8
+                  targetCompatibility JavaVersion.VERSION_1_8
+              }
+              kotlinOptions { jvmTarget = '1.8' }
+          }
+          dependencies {
+              implementation 'androidx.core:core-ktx:1.10.1'
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.9.0'
+              implementation 'com.google.android.gms:play-services-location:21.0.1'
+          }
+          EOF
+
+          # --- ICON XML (VECTOR DRAWABLE) ---
+          cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path android:fillColor="#00C853" android:pathData="M12,1L3,5v6c0,5.55 3.84,10.74 9,12 5.16,-1.26 9,-6.45 9,-12V5l-9,-4zM10,17l-5,-5 1.41,-1.41L10,14.17l7.59,-7.59L19,8l-9,9z"/>
+          </vector>
+          EOF
+
+          # --- MANIFEST ---
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+              <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+              <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              
+              <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+              <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
+              <application
+                  android:allowBackup="true"
+                  android:icon="@drawable/ic_launcher"
+                  android:roundIcon="@drawable/ic_launcher"
+                  android:label="Parental Control"
+                  android:theme="@style/Theme.ParentalControl">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <service android:name=".service.LocationService" android:exported="false" android:foregroundServiceType="location" />
+                  <service android:name=".service.UsageTrackerService" android:exported="false" />
+                  <service android:name=".service.MediaScannerService" android:exported="false" />
+              </application>
+          </manifest>
+          EOF
+
+          # --- RESOURCES ---
+          cat > app/src/main/res/values/themes.xml <<'EOF'
+          <resources xmlns:tools="http://schemas.android.com/tools">
+              <style name="Theme.ParentalControl" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+                  <item name="android:statusBarColor" tools:targetApi="l">#121212</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/values/strings.xml <<'EOF'
+          <resources>
+              <string name="app_name">Parental Control</string>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/layout/activity_main.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:gravity="center"
+              android:padding="24dp"
+              android:background="#121212">
+
+              <ImageView
+                  android:layout_width="80dp"
+                  android:layout_height="80dp"
+                  android:src="@drawable/ic_launcher"
+                  android:layout_marginBottom="16dp"/>
+
+              <TextView
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:text="Parental Control"
+                  android:textColor="#FFFFFF"
+                  android:textSize="26sp"
+                  android:textStyle="bold"
+                  android:layout_marginBottom="16dp"/>
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="Aplikasi ini memantau lokasi, penggunaan aplikasi, serta metadata foto & video. Data hanya untuk dashboard orang tua. Kamu bisa berhenti kapan saja."
+                  android:textColor="#CCCCCC"
+                  android:textSize="14sp"
+                  android:layout_marginBottom="24dp"/>
+
+              <CheckBox
+                  android:id="@+id/cbConsent"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="Saya setuju dan memahami monitoring ini"
+                  android:textColor="#FFFFFF"/>
+
+              <Button
+                  android:id="@+id/btnAgree"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="Aktifkan Parental Control"
+                  android:backgroundTint="#00C853"
+                  android:textColor="#FFFFFF"
+                  android:layout_marginTop="24dp"/>
+          </LinearLayout>
+          EOF
+
+          # --- KOTLIN FILES ---
+          cat > app/src/main/java/com/parental/control/MainActivity.kt <<'EOF'
+          package com.parental.control
+
+          import android.Manifest
+          import android.content.Intent
+          import android.os.Build
+          import android.os.Bundle
+          import android.provider.Settings
+          import android.widget.Button
+          import android.widget.CheckBox
+          import android.widget.Toast
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.app.ActivityCompat
+          import androidx.core.content.ContextCompat
+          import com.parental.control.service.LocationService
+          import com.parental.control.service.UsageTrackerService
+          import com.parental.control.service.MediaScannerService
+
+          class MainActivity : AppCompatActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContentView(R.layout.activity_main)
+
+                  val cbConsent = findViewById<CheckBox>(R.id.cbConsent)
+                  val btnAgree = findViewById<Button>(R.id.btnAgree)
+
+                  btnAgree.setOnClickListener {
+                      if (!cbConsent.isChecked) {
+                          Toast.makeText(this, "Centang consent dulu ya", Toast.LENGTH_SHORT).show()
+                          return@setOnClickListener
+                      }
+
+                      val perms = mutableListOf(
+                          Manifest.permission.ACCESS_FINE_LOCATION,
+                          Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                      )
+                      
+                      if (Build.VERSION.SDK_INT >= 33) {
+                          perms.add(Manifest.permission.POST_NOTIFICATIONS)
+                          perms.add(Manifest.permission.READ_MEDIA_IMAGES)
+                          perms.add(Manifest.permission.READ_MEDIA_VIDEO)
+                      } else {
+                          perms.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+                      }
+                      
+                      ActivityCompat.requestPermissions(this, perms.toTypedArray(), 100)
+                      startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+
+                      ContextCompat.startForegroundService(this, Intent(this, LocationService::class.java))
+                      ContextCompat.startForegroundService(this, Intent(this, UsageTrackerService::class.java))
+                      ContextCompat.startForegroundService(this, Intent(this, MediaScannerService::class.java))
+
+                      Toast.makeText(this, "Monitoring aktif.", Toast.LENGTH_LONG).show()
+                  }
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/parental/control/service/LocationService.kt <<'EOF'
+          package com.parental.control.service
+
+          import android.Manifest
+          import android.app.*
+          import android.content.Intent
+          import android.content.pm.PackageManager
+          import android.os.*
+          import androidx.core.app.NotificationCompat
+          import androidx.core.content.ContextCompat
+          import com.google.android.gms.location.*
+
+          class LocationService : Service() {
+              private lateinit var client: FusedLocationProviderClient
+
+              private val callback = object : LocationCallback() {
+                  override fun onLocationResult(result: LocationResult) {
+                      val loc = result.lastLocation ?: return
+                      android.util.Log.d("ParentalControl", "Lokasi: ${loc.latitude}, ${loc.longitude}")
+                  }
+              }
+
+              override fun onCreate() {
+                  super.onCreate()
+                  client = LocationServices.getFusedLocationProviderClient(this)
+                  startForeground(1, notif())
+              }
+
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 60000L).build()
+                  if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                      client.requestLocationUpdates(request, callback, Looper.getMainLooper())
+                  }
+                  return START_STICKY
+              }
+
+              override fun onDestroy() {
+                  client.removeLocationUpdates(callback)
+                  super.onDestroy()
+              }
+
+              private fun notif(): Notification {
+                  val channelId = "parental_location"
+                  val nm = getSystemService(NotificationManager::class.java)
+                  if (Build.VERSION.SDK_INT >= 26) {
+                      nm.createNotificationChannel(NotificationChannel(channelId, "Lokasi", NotificationManager.IMPORTANCE_LOW))
+                  }
+                  return NotificationCompat.Builder(this, channelId)
+                      .setContentTitle("Parental Control Aktif")
+                      .setContentText("Lokasi dipantau dengan izin")
+                      .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+                      .setOngoing(true)
+                      .build()
+              }
+
+              override fun onBind(intent: Intent?): IBinder? = null
+          }
+          EOF
+
+          cat > app/src/main/java/com/parental/control/service/UsageTrackerService.kt <<'EOF'
+          package com.parental.control.service
+
+          import android.app.*
+          import android.app.usage.UsageStatsManager
+          import android.content.Context
+          import android.content.Intent
+          import android.os.*
+          import androidx.core.app.NotificationCompat
+
+          class UsageTrackerService : Service() {
+              private val handler = Handler(Looper.getMainLooper())
+
+              private val runnable = object : Runnable {
+                  override fun run() {
+                      val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+                      val end = System.currentTimeMillis()
+                      val start = end - 60_000L
+                      val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end)
+                      stats?.forEach { s ->
+                          if (s.totalTimeInForeground > 0) {
+                              android.util.Log.d("ParentalControl", "App: ${s.packageName}")
+                          }
+                      }
+                      handler.postDelayed(this, 60_000L)
+                  }
+              }
+
+              override fun onCreate() {
+                  super.onCreate()
+                  startForeground(2, notif())
+              }
+
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  handler.post(runnable)
+                  return START_STICKY
+              }
+
+              override fun onDestroy() {
+                  handler.removeCallbacks(runnable)
+                  super.onDestroy()
+              }
+
+              private fun notif(): Notification {
+                  val channelId = "parental_usage"
+                  val nm = getSystemService(NotificationManager::class.java)
+                  if (Build.VERSION.SDK_INT >= 26) {
+                      nm.createNotificationChannel(NotificationChannel(channelId, "Usage", NotificationManager.IMPORTANCE_LOW))
+                  }
+                  return NotificationCompat.Builder(this, channelId)
+                      .setContentTitle("Usage Tracker Aktif")
+                      .setContentText("Penggunaan dipantau dengan izin")
+                      .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                      .setOngoing(true)
+                      .build()
+              }
+
+              override fun onBind(intent: Intent?): IBinder? = null
+          }
+          EOF
+
+          cat > app/src/main/java/com/parental/control/service/MediaScannerService.kt <<'EOF'
+          package com.parental.control.service
+
+          import android.app.*
+          import android.content.ContentUris
+          import android.content.Intent
+          import android.net.Uri
+          import android.os.Build
+          import android.os.IBinder
+          import android.provider.MediaStore
+          import androidx.core.app.NotificationCompat
+
+          class MediaScannerService : Service() {
+              override fun onCreate() {
+                  super.onCreate()
+                  startForeground(3, notif())
+              }
+
+              override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+                  Thread {
+                      scanPhotos()
+                      scanVideos()
+                  }.start()
+                  return START_STICKY
+              }
+
+              private fun scanPhotos() {
+                  val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                      MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+                  } else {
+                      MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                  }
+                  contentResolver.query(collection, null, null, null, null)?.use { cursor ->
+                      val idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                      val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
+                      while (cursor.moveToNext()) {
+                          val name = cursor.getString(nameCol)
+                          val uri: Uri = ContentUris.withAppendedId(collection, cursor.getLong(idCol))
+                          android.util.Log.d("ParentalControl", "PHOTO: $name | $uri")
+                      }
+                  }
+              }
+
+              private fun scanVideos() {
+                  val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                      MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+                  } else {
+                      MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                  }
+                  contentResolver.query(collection, null, null, null, null)?.use { cursor ->
+                      val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                      val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+                      while (cursor.moveToNext()) {
+                          val name = cursor.getString(nameCol)
+                          val uri: Uri = ContentUris.withAppendedId(collection, cursor.getLong(idCol))
+                          android.util.Log.d("ParentalControl", "VIDEO: $name | $uri")
+                      }
+                  }
+              }
+
+              private fun notif(): Notification {
+                  val channelId = "parental_media"
+                  val nm = getSystemService(NotificationManager::class.java)
+                  if (Build.VERSION.SDK_INT >= 26) {
+                      nm.createNotificationChannel(NotificationChannel(channelId, "Media", NotificationManager.IMPORTANCE_LOW))
+                  }
+                  return NotificationCompat.Builder(this, channelId)
+                      .setContentTitle("Media Scanner Aktif")
+                      .setContentText("Foto & video dipindai dengan izin")
+                      .setSmallIcon(android.R.drawable.ic_menu_gallery)
+                      .setOngoing(true)
+                      .build()
+              }
+
+              override fun onBind(intent: Intent?): IBinder? = null
+          }
+          EOF
+
+      - name: Build Debug APK
+        run: gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Parental-Control-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
