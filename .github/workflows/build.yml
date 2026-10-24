@@ -30,7 +30,13 @@ jobs:
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
 
-          # --- GRADLE FILES ---
+          # === TAMBAHAN: FILE WAJIB ANDROIDX ===
+          cat > gradle.properties <<'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          EOF
+
           cat > settings.gradle <<'EOF'
           pluginManagement {
               repositories { google(); mavenCentral(); gradlePluginPortal() }
@@ -80,7 +86,6 @@ jobs:
           }
           EOF
 
-          # --- ICON XML (VECTOR DRAWABLE) ---
           cat > app/src/main/res/drawable/ic_launcher.xml <<'EOF'
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
               android:width="108dp"
@@ -91,7 +96,6 @@ jobs:
           </vector>
           EOF
 
-          # --- MANIFEST ---
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -102,7 +106,6 @@ jobs:
               <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-              
               <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
               <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
               <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
@@ -114,9 +117,7 @@ jobs:
                   android:label="Parental Control"
                   android:theme="@style/Theme.ParentalControl">
 
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true">
+                  <activity android:name=".MainActivity" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
@@ -130,7 +131,6 @@ jobs:
           </manifest>
           EOF
 
-          # --- RESOURCES ---
           cat > app/src/main/res/values/themes.xml <<'EOF'
           <resources xmlns:tools="http://schemas.android.com/tools">
               <style name="Theme.ParentalControl" parent="Theme.MaterialComponents.DayNight.NoActionBar">
@@ -196,7 +196,6 @@ jobs:
           </LinearLayout>
           EOF
 
-          # --- KOTLIN FILES ---
           cat > app/src/main/java/com/parental/control/MainActivity.kt <<'EOF'
           package com.parental.control
 
@@ -454,7 +453,7 @@ jobs:
           EOF
 
       - name: Build Debug APK
-        run: gradle assembleDebug
+       le assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
